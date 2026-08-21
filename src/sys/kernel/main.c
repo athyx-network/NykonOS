@@ -82,7 +82,9 @@ int current_file_count = 0;
 int is_dark_mode = 1;
 char current_file[100] = "";
 int is_picking_wallpaper = 0;
-char current_wallpaper[100] = "sys/wp/win_7_fish.png";
+int is_picking_sys_font = 0;
+int is_picking_lock_font = 0;
+char current_wallpaper[100] = "sys/img/win_7_fish.png";
 int is_dragging = 0;
 int drag_start_x = 0;
 int cursor_x = 400;
@@ -131,26 +133,16 @@ void create_item(int is_dir) {
 }
 
 void draw_phone_frame() {
-    unsigned int bezel_color = RGB(30, 30, 30);
-    // Left bezel
-    draw_rect(phone_x - 10, phone_y - 20, 10, phone_h + 40, bezel_color);
-    // Right bezel
-    draw_rect(phone_x + phone_w, phone_y - 20, 10, phone_h + 40, bezel_color);
-    // Top bezel
-    draw_rect(phone_x, phone_y - 20, phone_w, 20, bezel_color);
-    // Bottom bezel
-    draw_rect(phone_x, phone_y + phone_h, phone_w, 20, bezel_color);
-    
-    // Home Button
-    draw_rect(phone_x + phone_w/2 - 25, phone_y + phone_h + 8, 50, 6, RGB(100, 100, 100));
+    // Intentionally empty to remove phone frame
 }
 
 void draw_status_bar() {
-    draw_rect(phone_x, phone_y, phone_w, 20, RGB(5, 10, 20));
+    draw_rect(phone_x, phone_y, phone_w, 20, RGB(20, 20, 20));
     char time_str[6];
     get_current_time(time_str);
-    draw_string(phone_x + 10, phone_y + 6, time_str, RGB(255, 255, 255));
-
+    extern char sys_font_path[100];
+    int time_w = fb_get_string_width(time_str, sys_font_path);
+    draw_string(phone_x + (phone_w - time_w) / 2, phone_y, time_str, RGB(255, 255, 255));
 }
 
 void draw_wallpaper_or_bg() {
@@ -197,19 +189,39 @@ void draw_home_screen() {
     int start_x = phone_x + 20, start_y = phone_y + 50, spacing_x = 76, spacing_y = 76;
     
     // Setting
+    extern void nykon_draw_sprite_rounded(const char *filepath, int x, int y, int r, unsigned int color_key);
     draw_icon_generic(start_x, start_y, RGB(180, 180, 180));
-    draw_string(start_x - 4, start_y + 52, "Setting", RGB(255, 255, 255));
+    nykon_draw_sprite_rounded("sys/img/settings_icon.png", start_x, start_y, 12, 0xFFFF00FF);
+    const char *label_font = "sys/fonts/Lato-Black.nfn";
+    int setting_w = fb_get_string_width("Setting", label_font);
+    draw_string_ttf(start_x + 24 - (setting_w / 2), start_y + 52, "Setting", label_font, RGB(255, 255, 255));
     
     // Files
     draw_icon_generic(start_x + spacing_x, start_y, RGB(100, 100, 255));
-    draw_string(start_x + spacing_x + 4, start_y + 52, "Files", RGB(255, 255, 255));
+    nykon_draw_sprite_rounded("sys/img/files_icon.png", start_x + spacing_x, start_y, 12, 0xFFFF00FF);
+    int files_w = fb_get_string_width("Files", label_font);
+    draw_string_ttf(start_x + spacing_x + 24 - (files_w / 2), start_y + 52, "Files", label_font, RGB(255, 255, 255));
 
     // Third-party Apps
     int current_x = start_x + spacing_x * 2;
     int current_y = start_y;
     for (int i = 0; i < num_registered_apps; i++) {
         draw_icon_generic(current_x, current_y, registered_apps[i]->icon_color);
-        draw_string(current_x, current_y + 52, registered_apps[i]->name, RGB(255, 255, 255));
+        if (registered_apps[i]->icon_path) {
+            extern char *fs_get_file_data(const char *filepath, unsigned int *size_out);
+            unsigned int size = 0;
+            char *data = fs_get_file_data(registered_apps[i]->icon_path, &size);
+            if (data && size >= 8 && data[0] == 'N' && data[1] == 'Y' && data[2] == 'K' && data[3] == 'N') {
+                unsigned short w = *((unsigned short *)(data + 4));
+                unsigned short h = *((unsigned short *)(data + 6));
+                nykon_draw_sprite_rounded(registered_apps[i]->icon_path, current_x + (48 - w)/2, current_y + (48 - h)/2, 12, 0xFFFF00FF);
+            } else {
+                nykon_draw_sprite_rounded(registered_apps[i]->icon_path, current_x, current_y, 12, 0xFFFF00FF);
+            }
+        }
+        
+        int app_name_w = fb_get_string_width(registered_apps[i]->name, label_font);
+        draw_string_ttf(current_x + 24 - (app_name_w / 2), current_y + 52, registered_apps[i]->name, label_font, RGB(255, 255, 255));
         
         current_x += spacing_x;
         if (current_x > phone_x + phone_w - 50) {
@@ -221,28 +233,29 @@ void draw_home_screen() {
 
 void draw_lock_slider();
 
+char current_lock_font[100] = "sys/fonts/Roboto-Regular_large.nfn";
+
 void draw_lock_screen() {
     draw_wallpaper_or_bg();
     
     char time_str[10];
     get_current_time(time_str);
     
-    int scale = 4;
-    int len = 0;
-    while (time_str[len] != '\0') len++;
-    int text_w = len * 8 * scale;
+    int approx_w = fb_get_string_width(time_str, current_lock_font);
     
-    draw_string_scaled(phone_x + (phone_w - text_w) / 2, phone_y + 100, time_str, RGB(255, 255, 255), scale);
+    draw_string_ttf(phone_x + (phone_w - approx_w) / 2, phone_y + 100, time_str, current_lock_font, RGB(255, 255, 255));
     
     draw_lock_slider();
 }
 
 void draw_lock_slider() {
-    // Slide to unlock track
-    int track_y = phone_y + phone_h - 80;
-    draw_rect(phone_x + 20, track_y, phone_w - 40, 48, RGB(40, 40, 40));
+    extern void draw_rounded_rect(int x, int y, int w, int h, int r, unsigned int color);
     
-    // Slider Thumb (square)
+    // Slide to unlock track (capsule shape)
+    int track_y = phone_y + phone_h - 80;
+    draw_rounded_rect(phone_x + 20, track_y, phone_w - 40, 48, 24, RGB(40, 40, 40));
+    
+    // Slider Thumb (circular)
     int slider_x = phone_x + 20;
     if (is_dragging) {
         slider_x = cursor_x - 24; // Center the slider on the cursor
@@ -253,24 +266,16 @@ void draw_lock_slider() {
     // "slide to unlock" text
     const char *prompt = "slide to unlock";
     int prompt_len = 15;
-    draw_string(phone_x + 80, track_y + 20, prompt, RGB(180, 180, 180));
+    draw_string_ttf(phone_x + 80, track_y + 14, prompt, "sys/fonts/Lato-Black.nfn", RGB(180, 180, 180));
     
-    draw_rect(slider_x, track_y, 48, 48, RGB(200, 200, 200));
-    draw_string(slider_x + 20, track_y + 20, ">", RGB(0, 0, 0));
+    draw_rounded_rect(slider_x, track_y, 48, 48, 24, RGB(200, 200, 200));
+    extern void nykon_draw_sprite(const char *filepath, int x, int y, unsigned int color_key);
+    nykon_draw_sprite("sys/img/unlock_sprite.png", slider_x, track_y, 0xFFFF00FF);
 }
 
 void update_lock_slider() {
     int track_y = phone_y + phone_h - 80;
-    int slider_x = phone_x + 20;
-    if (is_dragging) {
-        slider_x = cursor_x - 24;
-        if (slider_x < phone_x + 20) slider_x = phone_x + 20;
-        if (slider_x > phone_x + phone_w - 20 - 48) slider_x = phone_x + phone_w - 20 - 48;
-    }
-    draw_rect(phone_x + 20, track_y, phone_w - 40, 48, RGB(50, 50, 50));
-    draw_string(phone_x + 80, track_y + 20, "Slide to unlock", RGB(180, 180, 180));
-    draw_rect(slider_x, track_y, 48, 48, RGB(200, 200, 200));
-    draw_string(slider_x + 20, track_y + 20, ">", RGB(0, 0, 0));
+    draw_lock_slider();
     fb_swap_rect(phone_x + 20, track_y, phone_w - 40, 48);
 }
 
@@ -282,7 +287,7 @@ void play_boot_animation() {
 
     for (int frame = 0; frame <= bar_max_w; frame += 2) {
         draw_rect(phone_x, phone_y, phone_w, phone_h, RGB(0,0,0));
-        nykon_draw_sprite("sys/wp/logo_sprite.png", phone_x + phone_w/2 - 75, phone_y + phone_h/2 - 75, 0xFFFF00FF);
+        nykon_draw_sprite("sys/img/logo_sprite.png", phone_x + phone_w/2 - 75, phone_y + phone_h/2 - 75, 0xFFFF00FF);
         
         // Draw loading bar track
         draw_rounded_rect(bar_x, bar_y, bar_max_w, bar_h, bar_h / 2, RGB(50, 50, 50));
@@ -454,6 +459,19 @@ void draw_personalization_screen() {
     draw_string(phone_x + 20, list_y + 16, "Wallpaper", text_primary);
     draw_string(phone_x + phone_w - 20, list_y + 16, ">", text_secondary);
     draw_rect(phone_x + 20, list_y + 40, phone_w - 20, 1, border_color);
+    list_y += 40;
+    
+    // Font row
+    extern char sys_font_path[100];
+    draw_string(phone_x + 20, list_y + 16, "System Font", text_primary);
+    draw_string(phone_x + phone_w - 20, list_y + 16, ">", text_secondary);
+    draw_rect(phone_x + 20, list_y + 40, phone_w - 20, 1, border_color);
+    list_y += 40;
+
+    // Lock Font row
+    draw_string(phone_x + 20, list_y + 16, "Lock Font", text_primary);
+    draw_string(phone_x + phone_w - 20, list_y + 16, ">", text_secondary);
+    draw_rect(phone_x + 20, list_y + 40, phone_w - 20, 1, border_color);
 }
 
 void draw_about_screen() {
@@ -504,11 +522,13 @@ void draw_files_screen() {
     // Title Bar
     draw_rect(phone_x, phone_y + 20, phone_w, 40, title_bg);
     
+    extern char sys_font_path[100];
     if (current_dir[0] == '\0') {
-        draw_string(phone_x + phone_w/2 - 20, phone_y + 36, "Files", text_primary);
+        int title_w = fb_get_string_width("Files", sys_font_path);
+        draw_string(phone_x + (phone_w - title_w) / 2, phone_y + 30, "Files", text_primary);
     } else {
-        draw_string(phone_x + 10, phone_y + 36, "< Up", RGB(0, 122, 255));
-        draw_string(phone_x + 80, phone_y + 36, current_dir, text_primary);
+        draw_string(phone_x + 10, phone_y + 30, "< Up", RGB(0, 122, 255));
+        draw_string(phone_x + 80, phone_y + 30, current_dir, text_primary);
     }
     
     int in_sys = 0;
@@ -517,8 +537,11 @@ void draw_files_screen() {
     }
     
     if (!in_sys) {
-        draw_string(phone_x + phone_w - 90, phone_y + 36, "+Fldr", RGB(0, 122, 255));
-        draw_string(phone_x + phone_w - 45, phone_y + 36, "+Fil", RGB(0, 122, 255));
+        int right_align_w = fb_get_string_width("+Fil", sys_font_path);
+        draw_string(phone_x + phone_w - right_align_w - 20, phone_y + 30, "+Fil", RGB(0, 122, 255));
+        
+        int right_align_fldr = fb_get_string_width("+Fldr", sys_font_path);
+        draw_string(phone_x + phone_w - right_align_w - 20 - right_align_fldr - 15, phone_y + 30, "+Fldr", RGB(0, 122, 255));
     }
     
     current_file_count = fs_list_dir(current_dir, current_files, 14);
@@ -538,7 +561,7 @@ void draw_files_screen() {
         display_name[j] = '\0';
         
         unsigned int color = current_files[i].is_dir ? folder_color : text_primary;
-        draw_string(phone_x + 20, list_y + 12, display_name, color);
+        draw_string(phone_x + 20, list_y + 10, display_name, color);
         
         if (!current_files[i].is_dir) {
             char size_str[16];
@@ -558,13 +581,16 @@ void draw_files_screen() {
             size_str[idx++] = ' ';
             size_str[idx++] = 'B';
             size_str[idx++] = '\0';
-            draw_string(phone_x + phone_w - 60, list_y, size_str, text_secondary);
+            
+            extern char sys_font_path[100];
+            int size_w = fb_get_string_width(size_str, sys_font_path);
+            draw_string(phone_x + phone_w - size_w - 20, list_y + 10, size_str, text_secondary);
         } else {
-            draw_string(phone_x + phone_w - 20, list_y, ">", text_secondary);
+            draw_string(phone_x + phone_w - 20, list_y + 10, ">", text_secondary);
         }
         
-        draw_rect(phone_x + 20, list_y + 20, phone_w - 20, 1, border_color);
-        list_y += 30;
+        draw_rect(phone_x + 20, list_y + 35, phone_w - 20, 1, border_color);
+        list_y += 40;
     }
 }
 
@@ -718,8 +744,10 @@ void render_media_player() {
 void draw_bottom_nav_bar() {
     draw_rect(phone_x, phone_y + phone_h - 30, phone_w, 30, RGB(20, 20, 20));
     extern void draw_circle(int cx, int cy, int r, int thickness, unsigned int color);
-    draw_circle(phone_x + phone_w / 2, phone_y + phone_h - 15, 10, 2, RGB(200, 200, 200));
-    draw_triangle(phone_x + 90, phone_y + phone_h - 15, phone_x + 100, phone_y + phone_h - 22, phone_x + 100, phone_y + phone_h - 8, RGB(200, 200, 200));
+    draw_circle(phone_x + phone_w / 2, phone_y + phone_h - 15, 8, 2, RGB(200, 200, 200));
+    draw_triangle(phone_x + 88, phone_y + phone_h - 15, phone_x + 100, phone_y + phone_h - 23, phone_x + 100, phone_y + phone_h - 7, RGB(200, 200, 200));
+    draw_triangle(phone_x + 89, phone_y + phone_h - 15, phone_x + 100, phone_y + phone_h - 22, phone_x + 100, phone_y + phone_h - 8, RGB(200, 200, 200));
+    draw_triangle(phone_x + 90, phone_y + phone_h - 15, phone_x + 100, phone_y + phone_h - 21, phone_x + 100, phone_y + phone_h - 9, RGB(200, 200, 200));
 }
 
 void render_screen() {
@@ -748,6 +776,10 @@ void render_screen() {
         draw_apps_list_screen();
     } else if (current_screen == LOCK_SCREEN) {
         draw_lock_screen();
+    } else if (current_screen == 12) {
+        extern void nykon_draw_sprite(const char *filepath, int x, int y, unsigned int color_key);
+        draw_rect(phone_x, phone_y + 20, phone_w, phone_h - 20, RGB(0, 0, 0));
+        nykon_draw_sprite("sys/img/cat.png", phone_x, phone_y + 20, 0);
     }
     
     // Masking the sides (black outside the phone frame and the phone bezel)
@@ -886,16 +918,20 @@ void main() {
                         if (current_app_idx != -1) {
                             system_back_pressed = 1;
                         } else {
-                            if (current_screen == SETTINGS_SCREEN || (current_screen == FILES_SCREEN && current_dir[0] == '\0' && !is_picking_wallpaper) || current_screen == MEDIA_PLAYER_SCREEN) {
+                            if (current_screen == SETTINGS_SCREEN || (current_screen == FILES_SCREEN && current_dir[0] == '\0' && !is_picking_wallpaper && !is_picking_sys_font && !is_picking_lock_font) || current_screen == MEDIA_PLAYER_SCREEN) {
                                 current_screen = HOME_SCREEN;
                             } else if (current_screen == ABOUT_SCREEN || current_screen == DEV_OPTIONS_SCREEN || current_screen == APPS_LIST_SCREEN || current_screen == PERSONALIZATION_SCREEN) {
                                 current_screen = SETTINGS_SCREEN;
+                            } else if (current_screen == 12) {
+                                current_screen = ABOUT_SCREEN;
                             } else if (current_screen == KEYBOARD_TEST_SCREEN) {
                                 current_screen = DEV_OPTIONS_SCREEN;
                             } else if (current_screen == FILE_VIEWER_SCREEN) {
                                 current_screen = FILES_SCREEN;
-                            } else if (current_screen == FILES_SCREEN && current_dir[0] == '\0' && is_picking_wallpaper) {
+                            } else if (current_screen == FILES_SCREEN && current_dir[0] == '\0' && (is_picking_wallpaper || is_picking_sys_font || is_picking_lock_font)) {
                                 is_picking_wallpaper = 0;
+                                is_picking_sys_font = 0;
+                                is_picking_lock_font = 0;
                                 current_screen = PERSONALIZATION_SCREEN;
                             } else if (current_screen == FILES_SCREEN) {
                                 int len = 0;
@@ -1023,15 +1059,40 @@ void main() {
                         current_screen = FILES_SCREEN;
                         screen_changed = 1;
                     }
+                    // Font row hit test (y = phone_y + 184, height 40)
+                    else if (cursor_x >= phone_x && cursor_x <= phone_x + phone_w &&
+                             cursor_y >= phone_y + 184 && cursor_y < phone_y + 224) {
+                        is_picking_sys_font = 1;
+                        current_screen = FILES_SCREEN;
+                        screen_changed = 1;
+                    }
+                    // Lock Font row hit test (y = phone_y + 224, height 40)
+                    else if (cursor_x >= phone_x && cursor_x <= phone_x + phone_w &&
+                             cursor_y >= phone_y + 224 && cursor_y < phone_y + 264) {
+                        is_picking_lock_font = 1;
+                        current_screen = FILES_SCREEN;
+                        screen_changed = 1;
+                    }
                 } else if (current_screen == ABOUT_SCREEN) {
-                    // Nothing to hit test
+                    if (cursor_x >= phone_x && cursor_x <= phone_x + phone_w &&
+                        cursor_y >= phone_y + 80 && cursor_y < phone_y + 120) {
+                        static int about_clicks = 0;
+                        about_clicks++;
+                        if (about_clicks >= 5) {
+                            about_clicks = 0;
+                            current_screen = 12; // CAT_EASTER_EGG_SCREEN
+                            screen_changed = 1;
+                        }
+                    }
                 } else if (current_screen == FILES_SCREEN) {
                     // Back / Up Button hit test
                     if (cursor_x >= phone_x && cursor_x <= phone_x + 80 &&
                         cursor_y >= phone_y + 20 && cursor_y <= phone_y + 60) {
                         if (current_dir[0] == '\0') {
-                            if (is_picking_wallpaper) {
+                            if (is_picking_wallpaper || is_picking_sys_font || is_picking_lock_font) {
                                 is_picking_wallpaper = 0;
+                                is_picking_sys_font = 0;
+                                is_picking_lock_font = 0;
                                 current_screen = PERSONALIZATION_SCREEN;
                             } else {
                                 current_screen = HOME_SCREEN;
@@ -1070,8 +1131,8 @@ void main() {
                     
                     // List item hit test
                     if (!clicked_button && cursor_x >= phone_x && cursor_x <= phone_x + phone_w &&
-                             cursor_y >= phone_y + 80 && cursor_y <= phone_y + 80 + current_file_count * 30) {
-                        int idx = (cursor_y - (phone_y + 80)) / 30;
+                             cursor_y >= phone_y + 80 && cursor_y <= phone_y + 80 + current_file_count * 40) {
+                        int idx = (cursor_y - (phone_y + 80)) / 40;
                         if (idx >= 0 && idx < current_file_count) {
                             if (current_files[idx].is_dir) {
                                 int d_len = 0;
@@ -1089,6 +1150,7 @@ void main() {
                                 while (name[n_len] != '\0') n_len++;
                                 int is_img = 0;
                                 int is_audio = 0;
+                                int is_font = 0;
                                 if (n_len >= 4) {
                                     if ((name[n_len-4] == '.' && name[n_len-3] == 'j' && name[n_len-2] == 'p' && name[n_len-1] == 'g') ||
                                         (name[n_len-4] == '.' && name[n_len-3] == 'p' && name[n_len-2] == 'n' && name[n_len-1] == 'g')) {
@@ -1098,6 +1160,10 @@ void main() {
                                         (name[n_len-4] == '.' && name[n_len-3] == 'm' && name[n_len-2] == 'p' && name[n_len-1] == '3')) {
                                         is_audio = 1;
                                     }
+                                    if ((name[n_len-4] == '.' && name[n_len-3] == 't' && name[n_len-2] == 't' && name[n_len-1] == 'f') ||
+                                        (name[n_len-4] == '.' && name[n_len-3] == 'n' && name[n_len-2] == 'f' && name[n_len-1] == 'n')) {
+                                        is_font = 1;
+                                    }
                                 }
                                 if (n_len >= 5) {
                                     if (name[n_len-5] == '.' && name[n_len-4] == 'j' && name[n_len-3] == 'p' && name[n_len-2] == 'e' && name[n_len-1] == 'g') {
@@ -1105,7 +1171,7 @@ void main() {
                                     }
                                 }
                                 
-                                if (is_img || is_audio) {
+                                if (is_img || is_audio || is_font) {
                                     int d_len = 0;
                                     while (current_dir[d_len] != '\0') {
                                         current_file[d_len] = current_dir[d_len];
@@ -1129,6 +1195,56 @@ void main() {
                                         }
                                         current_wallpaper[w_len] = '\0';
                                         is_picking_wallpaper = 0;
+                                        current_screen = PERSONALIZATION_SCREEN;
+                                        screen_changed = 1;
+                                    } else if (is_picking_sys_font) {
+                                        char cleaned[100];
+                                        int len = 0;
+                                        while (current_file[len] != '\0') {
+                                            cleaned[len] = current_file[len];
+                                            len++;
+                                        }
+                                        if (len >= 4 && cleaned[len-4] == '.') {
+                                            len -= 4; // remove .ttf or .nfn
+                                        }
+                                        if (len >= 6 && cleaned[len-6] == '_' && cleaned[len-5] == 'l' && cleaned[len-4] == 'a' && cleaned[len-3] == 'r' && cleaned[len-2] == 'g' && cleaned[len-1] == 'e') {
+                                            len -= 6; // remove _large
+                                        }
+                                        cleaned[len++] = '.';
+                                        cleaned[len++] = 'n';
+                                        cleaned[len++] = 'f';
+                                        cleaned[len++] = 'n';
+                                        cleaned[len] = '\0';
+                                        
+                                        fb_set_font(cleaned);
+                                        is_picking_sys_font = 0;
+                                        current_screen = PERSONALIZATION_SCREEN;
+                                        screen_changed = 1;
+                                    } else if (is_picking_lock_font) {
+                                        int len = 0;
+                                        while (current_file[len] != '\0') {
+                                            current_lock_font[len] = current_file[len];
+                                            len++;
+                                        }
+                                        if (len >= 4 && current_lock_font[len-4] == '.') {
+                                            len -= 4; // remove .ttf or .nfn
+                                        }
+                                        if (len >= 6 && current_lock_font[len-6] == '_' && current_lock_font[len-5] == 'l' && current_lock_font[len-4] == 'a' && current_lock_font[len-3] == 'r' && current_lock_font[len-2] == 'g' && current_lock_font[len-1] == 'e') {
+                                            len -= 6; // remove _large
+                                        }
+                                        current_lock_font[len++] = '_';
+                                        current_lock_font[len++] = 'l';
+                                        current_lock_font[len++] = 'a';
+                                        current_lock_font[len++] = 'r';
+                                        current_lock_font[len++] = 'g';
+                                        current_lock_font[len++] = 'e';
+                                        current_lock_font[len++] = '.';
+                                        current_lock_font[len++] = 'n';
+                                        current_lock_font[len++] = 'f';
+                                        current_lock_font[len++] = 'n';
+                                        current_lock_font[len] = '\0';
+                                        
+                                        is_picking_lock_font = 0;
                                         current_screen = PERSONALIZATION_SCREEN;
                                         screen_changed = 1;
                                     } else {
@@ -1176,7 +1292,7 @@ void main() {
             } else if (is_dragging) {
                 if (current_screen == LOCK_SCREEN) {
                     if (dx != 0) { // Only update if it actually moved horizontally
-                        update_lock_slider();
+                        screen_changed = 1;
                     }
                 }
             }

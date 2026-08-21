@@ -231,7 +231,8 @@ char* fs_get_file_data(const char *path, unsigned int *out_size) {
             return ptr + 512;
         }
         
-        ptr += 512 + ((size + 511) / 512) * 512;
+        int blocks = (size + 511) / 512;
+        ptr += 512 + blocks * 512;
     }
     
     return 0;

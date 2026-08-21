@@ -3,13 +3,14 @@
 static int state = 0; // 0 = Menu, 1 = Playing, 2 = Game Over
 static int bird_y = 270 << 8;
 static int velocity = 0;
-static int gravity = 25;
-static int jump_power = -600;
+static int gravity = 30;      // slower fall
+static int jump_power = -800; // higher jump
 
 static int pipe_x = 320;
 static int pipe_gap_y = 270;
-static int pipe_w = 80;
+static int pipe_w = 120; // wider pipe
 static int pipe_gap_h = 130;
+static int pipe_speed = 3; // even slower pipe movement
 
 static int score = 0;
 static unsigned int last_time = 0;
@@ -70,7 +71,7 @@ static void flappy_update(void) {
     velocity += gravity;
     bird_y += velocity;
 
-    pipe_x -= 3;
+    pipe_x -= pipe_speed;
 
     if (pipe_x < -pipe_w) {
       pipe_x = phone_w;
@@ -85,18 +86,26 @@ static void flappy_update(void) {
     }
 
     int angle = (velocity * 45) / 600;
-    if (angle < -35) angle = -35;
-    if (angle > 45) angle = 45;
+    if (angle < -35)
+      angle = -35;
+    if (angle > 45)
+      angle = 45;
 
     int bird_x = 100;
     int top_pipe_bottom = pipe_gap_y - (pipe_gap_h / 2);
     int bottom_pipe_top = pipe_gap_y + (pipe_gap_h / 2);
 
-    int col_top = nykon_check_pixel_collision("apps/flappy bird/character.png", phone_x + bird_x, phone_y + by, angle, "apps/flappy bird/pipe_down_sprite.png", phone_x + pipe_x, phone_y + top_pipe_bottom - 500, 0xFFFF00FF);
-    int col_bot = nykon_check_pixel_collision("apps/flappy bird/character.png", phone_x + bird_x, phone_y + by, angle, "apps/flappy bird/pipe_up_sprite.png", phone_x + pipe_x, phone_y + bottom_pipe_top, 0xFFFF00FF);
+    int col_top = nykon_check_pixel_collision(
+        "apps/flappy bird/character.png", phone_x + bird_x, phone_y + by, angle,
+        "apps/flappy bird/pipe_down_sprite.png", phone_x + pipe_x,
+        phone_y + top_pipe_bottom - 500, 0xFFFF00FF);
+    int col_bot = nykon_check_pixel_collision(
+        "apps/flappy bird/character.png", phone_x + bird_x, phone_y + by, angle,
+        "apps/flappy bird/pipe_up_sprite.png", phone_x + pipe_x,
+        phone_y + bottom_pipe_top, 0xFFFF00FF);
 
     if (col_top || col_bot) {
-        state = 2; // Game over
+      state = 2; // Game over
     }
   } else if (state == 2) { // Game Over
     if (clicked) {
@@ -117,24 +126,30 @@ static void flappy_draw(void) {
   // Draw pipes
   int top_pipe_bottom = pipe_gap_y - (pipe_gap_h / 2);
   int bottom_pipe_top = pipe_gap_y + (pipe_gap_h / 2);
-  
+
   // Top pipe (pipe_down_sprite.png)
-  nykon_draw_sprite("apps/flappy bird/pipe_down_sprite.png", phone_x + pipe_x, phone_y + top_pipe_bottom - 500, 0xFFFF00FF);
+  nykon_draw_sprite("apps/flappy bird/pipe_down_sprite.png", phone_x + pipe_x,
+                    phone_y + top_pipe_bottom - 500, 0xFFFF00FF);
   // Bottom pipe (pipe_up_sprite.png)
-  nykon_draw_sprite("apps/flappy bird/pipe_up_sprite.png", phone_x + pipe_x, phone_y + bottom_pipe_top, 0xFFFF00FF);
+  nykon_draw_sprite("apps/flappy bird/pipe_up_sprite.png", phone_x + pipe_x,
+                    phone_y + bottom_pipe_top, 0xFFFF00FF);
 
   // Cap velocity (terminal velocity)
-  if (velocity > 800) velocity = 800;
+  if (velocity > 600)
+    velocity = 600; // slower terminal velocity
 
   // Calculate smooth tilt angle (limit max downward tilt to 45 degrees)
   int angle = (velocity * 45) / 600;
-  if (angle < -35) angle = -35;
-  if (angle > 45) angle = 45;
+  if (angle < -35)
+    angle = -35;
+  if (angle > 45)
+    angle = 45;
 
   // Draw bird sprite with smooth rotation
   int cx = phone_x + 100;
   int cy = phone_y + (bird_y >> 8);
-  nykon_draw_sprite_rotated("apps/flappy bird/character.png", cx, cy, angle, 0xFFFF00FF);
+  nykon_draw_sprite_rotated("apps/flappy bird/character.png", cx, cy, angle,
+                            0xFFFF00FF);
 
   // UI
   char score_str[16];
@@ -167,5 +182,6 @@ static void flappy_draw(void) {
   // exiting now.
 }
 
-NykonApp flappy_app = {"Flappy Bird", RGB(0, 200, 0), flappy_init,
-                       flappy_update, flappy_draw};
+NykonApp flappy_app = {"Flappy Bird",  "apps/flappy bird/icon.png",
+                       RGB(0, 200, 0), flappy_init,
+                       flappy_update,  flappy_draw};

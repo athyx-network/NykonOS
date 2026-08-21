@@ -4,9 +4,11 @@
 // Core drawing functions
 void nykon_draw_rect(int x, int y, int w, int h, unsigned int color);
 void nykon_draw_string(int x, int y, const char *text, unsigned int color);
+void nykon_draw_string_ttf(int x, int y, const char *text, const char *font_path, unsigned int color);
 void nykon_draw_image(const char *filepath, int x, int y);
 void nykon_draw_line(int x1, int y1, int x2, int y2, unsigned int color);
 void nykon_draw_sprite(const char *filepath, int x, int y, unsigned int color_key);
+void nykon_draw_sprite_rounded(const char *filepath, int x, int y, int r, unsigned int color_key);
 void nykon_draw_sprite_rotated(const char *filepath, int cx, int cy, int angle, unsigned int color_key);
 int nykon_check_pixel_collision(const char *sprite1, int cx1, int cy1, int angle1, const char *sprite2, int x2, int y2, unsigned int color_key);
 
@@ -19,7 +21,15 @@ void nykon_draw_string_scaled(int x, int y, const char *text,
 // Input functions
 int nykon_get_mouse(int *x, int *y, int *left_click);
 int nykon_get_keyboard(char *ascii_out);
+int nykon_get_key_state(char key);
 int nykon_get_back_pressed(void);
+
+// App framework function
+void nykon_request_redraw(void);
+void nykon_lock_screen(void);
+
+// Fast blitting
+void nykon_draw_framebuffer(unsigned int *pixels, int x, int y, int width, int height);
 
 // System functions
 unsigned int nykon_get_time();
@@ -50,6 +60,7 @@ void nykon_request_redraw(void);
 // The standard Application structure that every app must export
 typedef struct {
   const char *name;
+  const char *icon_path;
   unsigned int icon_color;
   void (*init)(void);
   void (*update)(void);

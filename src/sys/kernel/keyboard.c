@@ -39,6 +39,8 @@ static const char scancode_set2_to_ascii[256] = {
     0, 0, 0, 0, 0, 0, '\b', 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
+char key_states[256] = {0};
+
 static int extended = 0;
 static int break_code = 0;
 
@@ -61,6 +63,10 @@ int keyboard_poll(char *ascii_char) {
         }
         
         if (break_code) {
+            if (!extended && code < 256) {
+                char ascii = scancode_set2_to_ascii[code];
+                if (ascii) key_states[(unsigned char)ascii] = 0;
+            }
             break_code = 0;
             extended = 0;
             return 0; // Key released
@@ -69,6 +75,7 @@ int keyboard_poll(char *ascii_char) {
         // Key pressed
         if (!extended && code < 256) {
             *ascii_char = scancode_set2_to_ascii[code];
+            if (*ascii_char) key_states[(unsigned char)*ascii_char] = 1;
         }
         
         extended = 0;

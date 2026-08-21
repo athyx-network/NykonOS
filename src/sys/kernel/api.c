@@ -18,7 +18,14 @@ void nykon_draw_rect(int x, int y, int w, int h, unsigned int color) {
 }
 
 void nykon_draw_string(int x, int y, const char *text, unsigned int color) {
-  draw_string(x, y, text, color);
+    extern char sys_font_path[100];
+    extern void draw_string_ttf(int x, int y, const char *str, const char *font_path, unsigned int color);
+    draw_string_ttf(x, y, text, sys_font_path, color);
+}
+
+void nykon_draw_string_ttf(int x, int y, const char *text, const char *font_path, unsigned int color) {
+    extern void draw_string_ttf(int x, int y, const char *str, const char *font_path, unsigned int color);
+    draw_string_ttf(x, y, text, font_path, color);
 }
 
 void nykon_draw_string_scaled(int x, int y, const char *text,
@@ -211,6 +218,111 @@ void nykon_draw_sprite(const char *filepath, int x, int y, unsigned int color_ke
   }
 }
 
+static unsigned int api_blend_colors(unsigned int fg, unsigned int bg, int alpha) {
+    if (alpha <= 0) return bg;
+    if (alpha >= 255) return fg;
+    
+    unsigned char fg_r = (fg >> 16) & 0xFF;
+    unsigned char fg_g = (fg >> 8) & 0xFF;
+    unsigned char fg_b = fg & 0xFF;
+    
+    unsigned char bg_r = (bg >> 16) & 0xFF;
+    unsigned char bg_g = (bg >> 8) & 0xFF;
+    unsigned char bg_b = bg & 0xFF;
+    
+    unsigned char r = (unsigned char)((fg_r * alpha + bg_r * (255 - alpha)) / 255);
+    unsigned char g = (unsigned char)((fg_g * alpha + bg_g * (255 - alpha)) / 255);
+    unsigned char b = (unsigned char)((fg_b * alpha + bg_b * (255 - alpha)) / 255);
+    
+    return (r << 16) | (g << 8) | b;
+}
+
+static int get_corner_alpha(int dx, int dy, int r) {
+    int d2 = dx * dx + dy * dy;
+    if (d2 <= (r - 1) * (r - 1)) return 255;
+    if (d2 >= (r + 1) * (r + 1)) return 0;
+    
+    int val = d2 << 16;
+    unsigned int temp, g = 0;
+    unsigned int b = 0x8000;
+    while (b > 0) {
+        temp = g + b;
+        if (temp * temp <= (unsigned int)val) {
+            g = temp;
+        }
+        b >>= 1;
+    }
+    int dist_scaled = g;
+    int alpha = (r * 256 + 128) - dist_scaled;
+    if (alpha < 0) alpha = 0;
+    if (alpha > 255) alpha = 255;
+    return alpha;
+}
+
+void nykon_draw_sprite_rounded(const char *filepath, int x, int y, int r, unsigned int color_key) {
+  extern char *fs_get_file_data(const char *filepath, unsigned int *size_out);
+  
+  unsigned int size = 0;
+  char *data = fs_get_file_data(filepath, &size);
+ 
+  if (data && size >= 8 && data[0] == 'N' && data[1] == 'Y' && data[2] == 'K' && data[3] == 'N') {
+    unsigned short width = *((unsigned short *)(data + 4));
+    unsigned short height = *((unsigned short *)(data + 6));
+    unsigned int *pixels = (unsigned int *)(data + 8);
+ 
+    extern unsigned int *back_buffer;
+    extern int phone_x, phone_y, phone_w, phone_h;
+ 
+    int clip_x1 = phone_x;
+    int clip_y1 = phone_y;
+    int clip_x2 = phone_x + phone_w;
+    int clip_y2 = phone_y + phone_h;
+ 
+    int start_y = (y < clip_y1) ? clip_y1 - y : 0;
+    int start_x = (x < clip_x1) ? clip_x1 - x : 0;
+    int end_y = (y + height > clip_y2) ? clip_y2 - y : height;
+    int end_x = (x + width > clip_x2) ? clip_x2 - x : width;
+ 
+    for (int row = start_y; row < end_y; row++) {
+      unsigned int *dst = &back_buffer[(y + row) * 800 + x + start_x];
+      unsigned int *src = &pixels[row * width + start_x];
+      int num_pixels = end_x - start_x;
+      for (int col = 0; col < num_pixels; col++) {
+        if (src[col] != color_key) {
+          // Squircle check
+          int alpha = 255;
+          int px = col + start_x;
+          int py = row;
+          
+          if (px < r && py < r) {
+              int dx = r - px;
+              int dy = r - py;
+              alpha = get_corner_alpha(dx, dy, r);
+          } else if (px >= width - r && py < r) {
+              int dx = px - (width - r - 1);
+              int dy = r - py;
+              alpha = get_corner_alpha(dx, dy, r);
+          } else if (px < r && py >= height - r) {
+              int dx = r - px;
+              int dy = py - (height - r - 1);
+              alpha = get_corner_alpha(dx, dy, r);
+          } else if (px >= width - r && py >= height - r) {
+              int dx = px - (width - r - 1);
+              int dy = py - (height - r - 1);
+              alpha = get_corner_alpha(dx, dy, r);
+          }
+          
+          if (alpha >= 255) {
+              dst[col] = src[col];
+          } else if (alpha > 0) {
+              dst[col] = api_blend_colors(src[col], dst[col], alpha);
+          }
+        }
+      }
+    }
+  }
+}
+
 void nykon_draw_sprite_rotated(const char *filepath, int cx, int cy, int angle, unsigned int color_key) {
   extern char *fs_get_file_data(const char *filepath, unsigned int *size_out);
   static const char *last_filepath_rot = 0;
@@ -371,6 +483,35 @@ int nykon_get_keyboard(char *ascii_out) {
   return 0;
 }
 
+int nykon_get_key_state(char key) {
+    extern char key_states[256];
+    return key_states[(unsigned char)key];
+}
+
+void nykon_draw_framebuffer(unsigned int *pixels, int x, int y, int width, int height) {
+    extern unsigned int *back_buffer;
+    extern int phone_x, phone_y, phone_w, phone_h;
+
+    int clip_x1 = phone_x;
+    int clip_y1 = phone_y;
+    int clip_x2 = phone_x + phone_w;
+    int clip_y2 = phone_y + phone_h;
+
+    int start_y = (y < clip_y1) ? clip_y1 - y : 0;
+    int start_x = (x < clip_x1) ? clip_x1 - x : 0;
+    int end_y = (y + height > clip_y2) ? clip_y2 - y : height;
+    int end_x = (x + width > clip_x2) ? clip_x2 - x : width;
+
+    for (int row = start_y; row < end_y; row++) {
+        unsigned int *dst = &back_buffer[(y + row) * 800 + x + start_x];
+        unsigned int *src = &pixels[row * width + start_x];
+        int num_pixels = end_x - start_x;
+        for (int col = 0; col < num_pixels; col++) {
+            dst[col] = src[col];
+        }
+    }
+}
+
 int nykon_get_back_pressed(void) {
   extern int system_back_pressed;
   if (system_back_pressed) {
@@ -378,6 +519,15 @@ int nykon_get_back_pressed(void) {
     return 1;
   }
   return 0;
+}
+
+
+
+void nykon_lock_screen(void) {
+    extern int current_screen;
+    extern int current_app_idx;
+    current_screen = 6; // LOCK_SCREEN
+    current_app_idx = -1;
 }
 
 void nykon_get_screen_bounds(int *x, int *y, int *w, int *h) {
