@@ -184,6 +184,41 @@ a {
   -webkit-text-fill-color: transparent;
 }
 
+.hero-actions {
+  margin-top: 24px;
+}
+
+.btn-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  background: var(--gradient-badge);
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(100, 162, 163, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-download:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(100, 162, 163, 0.55);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.btn-download svg {
+  transition: transform 0.2s ease;
+}
+
+.btn-download:hover svg {
+  transform: translateY(2px);
+}
+
 /* ==========================================================================
    Phone Mockup Display
    ========================================================================== */
@@ -236,5 +271,9 @@ a {
   }
   .hero-title {
     font-size: 2.4rem;
+  }
+  .hero-actions {
+    display: flex;
+    justify-content: center;
   }
 }
