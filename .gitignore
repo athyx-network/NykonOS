@@ -1,0 +1,16 @@
+# Build output directories
+build/
+build_bpi/
+
+# Compiled binary & object artifacts
+*.o
+*.elf
+*.bin
+!build_tools/*.bin
+*.img
+*.tar
+*.nfn
+
+# Python cache
+__pycache__/
+*.pyc
