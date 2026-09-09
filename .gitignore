@@ -14,3 +14,4 @@ build_bpi/
 # Python cache
 __pycache__/
 *.pyc
+site/
