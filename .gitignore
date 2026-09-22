@@ -1,6 +1,7 @@
 # Build output directories
 build/
 build_bpi/
+build_tab/
 
 # Compiled binary & object artifacts
 *.o

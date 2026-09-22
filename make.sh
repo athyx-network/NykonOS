@@ -107,6 +107,98 @@ EOF
     echo "4. Click 'Flash!' and insert into your Banana Pi M2 Zero."
     echo "========================================================="
 
+elif [ "$TARGET" == "tab" ] || [ "$TARGET" == "msm8916" ] || [ "$TARGET" == "t560nu" ]; then
+    echo "========================================="
+    echo "Building Nykon OS for Samsung Galaxy Tab E"
+    echo "(SM-T560NU / Qualcomm Snapdragon 410 / lk2nd)"
+    echo "========================================="
+    
+    mkdir -p ../build_tab
+    rm -rf ../build_tab/*.o ../build_tab/os.*
+    
+    echo "Registering apps..."
+    python3 ../build_tools/register_apps.py
+    
+    echo "Compiling for Cortex-A53 / MSM8916..."
+    CPU_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -DTARGET_MSM8916"
+    
+    arm-none-eabi-gcc -c -mcpu=cortex-a7 -DTARGET_MSM8916 -x assembler-with-cpp sys/boot/startup.s -o ../build_tab/startup.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/main.c -o ../build_tab/main.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/fb.c -o ../build_tab/fb.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/mouse.c -o ../build_tab/mouse.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/keyboard.c -o ../build_tab/keyboard.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/mm.c -o ../build_tab/mm.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/fs.c -o ../build_tab/fs.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/fs/block_dev.c -o ../build_tab/block_dev.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/fs/fat32.c -o ../build_tab/fat32.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/api.c -o ../build_tab/api.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/app_registry.c -o ../build_tab/app_registry.o
+    arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g sys/kernel/audio.c -o ../build_tab/audio.o
+
+    # Compile all apps
+    find apps -name "*.c" | while read -r app; do
+        if [ -f "$app" ]; then
+            filename=$(basename -- "$app")
+            app_name="${filename%.*}"
+            arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g "$app" -o "../build_tab/${app_name}.o"
+        fi
+    done
+
+    if [ -d "../test" ]; then
+        find ../test -name "*.c" | while read -r app; do
+            if [ -f "$app" ]; then
+                filename=$(basename -- "$app")
+                app_name="${filename%.*}"
+                arm-none-eabi-gcc -c $CPU_FLAGS -O3 -fno-builtin -g "$app" -o "../build_tab/${app_name}.o"
+            fi
+        done
+    fi
+
+    echo "Linking kernel for MSM8916..."
+    arm-none-eabi-ld -T sys/linker_msm8916.ld ../build_tab/*.o -o ../build_tab/os.elf
+    arm-none-eabi-objcopy -O binary ../build_tab/os.elf ../build_tab/os.bin
+
+    echo "Building filesystem..."
+    rm -rf ../build_tab/rootfs_staging
+    mkdir -p ../build_tab/rootfs_staging
+    cp -r * ../build_tab/rootfs_staging/
+    python3 ../build_tools/img_compiler.py ../build_tab/rootfs_staging
+    (cd ../build_tab/rootfs_staging && tar -cf ../rootfs.tar *)
+
+    echo "Generating bootable SD image for Samsung Galaxy Tab E (lk2nd)..."
+    IMG_PATH="../build_tab/nykon-tab-e-sd.img"
+    PART_TMP="/tmp/nykon_tab_fat_$$.img"
+    
+    # 1. Create 64MB disk image
+    dd if=/dev/zero of="$IMG_PATH" bs=1M count=64 status=none
+    
+    # 2. Partition with sfdisk (FAT32 starting at 1MB offset)
+    printf "2048,,c,*\n" | sfdisk -q "$IMG_PATH" > /dev/null 2>&1
+    
+    # 3. Create 63MB FAT32 partition and copy boot assets
+    mkfs.vfat -F 32 -n "NYKON_TAB" -C "$PART_TMP" $((63 * 1024)) > /dev/null 2>&1
+    mcopy -i "$PART_TMP" ../build_tab/os.bin ../build_tab/rootfs.tar ::/
+    
+    # 4. Burn partition into image at 1MB offset
+    dd if="$PART_TMP" of="$IMG_PATH" bs=1M seek=1 conv=notrunc status=none
+    rm -f "$PART_TMP"
+
+    echo ""
+    echo "========================================================="
+    echo "SUCCESS: Samsung Galaxy Tab E (SM-T560NU) image created!"
+    echo "  -> build_tab/nykon-tab-e-sd.img (SD Card Disk Image)"
+    echo "  -> build_tab/os.bin            (Snapdragon 410 Payload)"
+    echo "  -> build_tab/rootfs.tar        (Filesystem Archive)"
+    echo "========================================================="
+    echo "Dual-Boot with LineageOS using lk2nd:"
+    echo "1. Flash lk2nd (samsung-gtelwifi) to your tablet."
+    echo "2. Flash 'build_tab/nykon-tab-e-sd.img' to a MicroSD card with Balena Etcher."
+    echo "3. Insert MicroSD card into your Tab E."
+    echo "4. Turn on holding Vol Down -> lk2nd boot menu will let you pick:"
+    echo "   - Boot LineageOS (eMMC internal memory)"
+    echo "   - Boot Nykon OS (MicroSD card)"
+    echo "========================================================="
+
 else
     mkdir -p ../build
 
